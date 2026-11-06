@@ -6,3 +6,4 @@ build/
 *.db-shm
 .DS_Store
 **/.jqwik-database
+.vscode/
