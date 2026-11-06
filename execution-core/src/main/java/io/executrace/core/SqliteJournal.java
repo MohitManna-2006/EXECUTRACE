@@ -17,7 +17,7 @@ import java.util.zip.CRC32C;
 public final class SqliteJournal implements AutoCloseable {
     public static final String GENESIS_DIGEST = "0".repeat(64);
     private final Connection db;
-    public record Dedupe(long offset, String payloadHash, boolean accepted, String reason) {}
+    public record Dedupe(long offset, String payloadHash, boolean accepted, String reason, String projectionDigestSha256) {}
 
     public SqliteJournal(Path file) {
         try {
@@ -28,7 +28,7 @@ public final class SqliteJournal implements AutoCloseable {
                 s.execute("PRAGMA foreign_keys=ON");
                 s.execute("PRAGMA busy_timeout=5000");
                 s.execute("CREATE TABLE IF NOT EXISTS events (offset INTEGER PRIMARY KEY, event_id TEXT NOT NULL UNIQUE, schema_version INTEGER NOT NULL, reducer_version INTEGER NOT NULL, event_time_ns INTEGER NOT NULL, payload_json TEXT NOT NULL, payload_crc32c INTEGER NOT NULL, previous_digest TEXT NOT NULL, digest TEXT NOT NULL)");
-                s.execute("CREATE TABLE IF NOT EXISTS request_dedupe (scope TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, offset INTEGER NOT NULL, accepted INTEGER NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(scope, request_id), FOREIGN KEY(offset) REFERENCES events(offset))");
+                s.execute("CREATE TABLE IF NOT EXISTS request_dedupe (scope TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, offset INTEGER NOT NULL, accepted INTEGER NOT NULL, reason TEXT NOT NULL, projection_digest TEXT NOT NULL, PRIMARY KEY(scope, request_id), FOREIGN KEY(offset) REFERENCES events(offset))");
                 s.execute("CREATE TABLE IF NOT EXISTS outbox (source_offset INTEGER PRIMARY KEY, command_type TEXT NOT NULL, client_order_id TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('PENDING','ATTEMPTED','CONFIRMED','UNKNOWN')), FOREIGN KEY(source_offset) REFERENCES events(offset))");
                 s.execute("CREATE TABLE IF NOT EXISTS snapshots (last_offset INTEGER PRIMARY KEY, reducer_version INTEGER NOT NULL, journal_digest TEXT NOT NULL, state_json TEXT NOT NULL, state_sha256 TEXT NOT NULL, FOREIGN KEY(last_offset) REFERENCES events(offset))");
             }
@@ -38,15 +38,15 @@ public final class SqliteJournal implements AutoCloseable {
         } catch (SQLException e) { throw new IllegalStateException("journal open failed", e); }
     }
     public synchronized Dedupe dedupe(String scope, UUID requestId) {
-        try (PreparedStatement p = db.prepareStatement("SELECT offset,payload_hash,accepted,reason FROM request_dedupe WHERE scope=? AND request_id=?")) {
+        try (PreparedStatement p = db.prepareStatement("SELECT offset,payload_hash,accepted,reason,projection_digest FROM request_dedupe WHERE scope=? AND request_id=?")) {
             p.setString(1, scope); p.setString(2, requestId.toString());
             try (ResultSet r = p.executeQuery()) {
-                return r.next() ? new Dedupe(r.getLong(1), r.getString(2), r.getInt(3) == 1, r.getString(4)) : null;
+                return r.next() ? new Dedupe(r.getLong(1), r.getString(2), r.getInt(3) == 1, r.getString(4), r.getString(5)) : null;
             }
         } catch (SQLException e) { throw new IllegalStateException("dedupe read failed", e); }
     }
     public synchronized JournalEnvelope append(String scope, UUID requestId, String payloadHash, long eventTimeNs,
-                                                BusinessEvent event, boolean accepted, String reason,
+                                                BusinessEvent event, boolean accepted, String reason, String projectionDigestSha256,
                                                 OutboxEntry outbox) {
         Checks.text(scope, "scope", 128); Checks.id(requestId, "requestId");
         Checks.nonnegative(eventTimeNs, "eventTimeNs");
@@ -69,9 +69,9 @@ public final class SqliteJournal implements AutoCloseable {
                 p.setLong(5, eventTimeNs); p.setString(6, new String(payload, StandardCharsets.UTF_8));
                 p.setLong(7, crc.getValue()); p.setString(8, previous); p.setString(9, digest); p.executeUpdate();
             }
-            try (PreparedStatement p = db.prepareStatement("INSERT INTO request_dedupe VALUES(?,?,?,?,?,?)")) {
+            try (PreparedStatement p = db.prepareStatement("INSERT INTO request_dedupe VALUES(?,?,?,?,?,?,?)")) {
                 p.setString(1, scope); p.setString(2, requestId.toString()); p.setString(3, payloadHash);
-                p.setLong(4, offset); p.setInt(5, accepted ? 1 : 0); p.setString(6, reason); p.executeUpdate();
+                p.setLong(4, offset); p.setInt(5, accepted ? 1 : 0); p.setString(6, reason); p.setString(7, projectionDigestSha256); p.executeUpdate();
             }
             if (outbox != null) try (PreparedStatement p = db.prepareStatement("INSERT INTO outbox VALUES(?,?,?,?,?)")) {
                 p.setLong(1, offset); p.setString(2, outbox.commandType()); p.setString(3, outbox.clientOrderId());
