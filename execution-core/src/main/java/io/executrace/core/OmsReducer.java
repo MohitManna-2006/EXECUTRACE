@@ -108,6 +108,35 @@ public final class OmsReducer {
                     c.cumQty(), 0, r.newLimitPriceMicroUsd(), c.fillNotionalMicroUsd(), state,
                     RequestState.NONE, c.brokerOrderId(), Math.addExact(c.revision(), 1)));
             replacements.remove(c.id());
+        } else if (event instanceof BusinessEvent.ReplaceRejected e) {
+            ChildOrder c = child(children, e.childId());
+            require(c.requestState() == RequestState.PENDING_REPLACE, "replace reject not expected");
+            replacements.remove(c.id());
+            children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
+                    c.fillNotionalMicroUsd(), c.state(), RequestState.NONE, c.brokerOrderId()));
+        } else if (event instanceof BusinessEvent.Expired e) {
+            ChildOrder c = child(children, e.childId());
+            require(c.liveOrUnknown(), "expiry on terminal order");
+            children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), Math.addExact(c.canceledQty(), c.leavesQty()),
+                    c.limitPriceMicroUsd(), c.fillNotionalMicroUsd(), OrderState.EXPIRED, RequestState.NONE, c.brokerOrderId()));
+            replacements.remove(c.id());
+        } else if (event instanceof BusinessEvent.Suspended e) {
+            ChildOrder c = child(children, e.childId());
+            require(c.liveOrUnknown() && c.state() != OrderState.SUSPENDED, "suspension not expected");
+            children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
+                    c.fillNotionalMicroUsd(), OrderState.SUSPENDED, c.requestState(), c.brokerOrderId()));
+        } else if (event instanceof BusinessEvent.Resumed e) {
+            ChildOrder c = child(children, e.childId());
+            require(c.state() == OrderState.SUSPENDED, "resume not expected");
+            OrderState resumed = c.cumQty() == 0 ? OrderState.NEW : OrderState.PARTIALLY_FILLED;
+            children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
+                    c.fillNotionalMicroUsd(), resumed, c.requestState(), c.brokerOrderId()));
+        } else if (event instanceof BusinessEvent.ReconciliationRequired e) {
+            ChildOrder c = child(children, e.childId());
+            Checks.text(e.reason(), "reason", 256);
+            require(c.liveOrUnknown(), "reconciliation on terminal order");
+            children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
+                    c.fillNotionalMicroUsd(), OrderState.RECONCILIATION_REQUIRED, c.requestState(), c.brokerOrderId()));
         } else if (event instanceof BusinessEvent.BrokerRejected e) {
             ChildOrder c = child(children, e.childId());
             Checks.text(e.reason(), "reason", 256);

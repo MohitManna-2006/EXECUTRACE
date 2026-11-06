@@ -15,6 +15,11 @@ import java.util.UUID;
     @JsonSubTypes.Type(value=BusinessEvent.CancelRejected.class,name="CancelRejected"),
     @JsonSubTypes.Type(value=BusinessEvent.ReplaceRequested.class,name="ReplaceRequested"),
     @JsonSubTypes.Type(value=BusinessEvent.ReplaceConfirmed.class,name="ReplaceConfirmed"),
+    @JsonSubTypes.Type(value=BusinessEvent.ReplaceRejected.class,name="ReplaceRejected"),
+    @JsonSubTypes.Type(value=BusinessEvent.Expired.class,name="Expired"),
+    @JsonSubTypes.Type(value=BusinessEvent.Suspended.class,name="Suspended"),
+    @JsonSubTypes.Type(value=BusinessEvent.Resumed.class,name="Resumed"),
+    @JsonSubTypes.Type(value=BusinessEvent.ReconciliationRequired.class,name="ReconciliationRequired"),
     @JsonSubTypes.Type(value=BusinessEvent.BrokerRejected.class,name="BrokerRejected"),
     @JsonSubTypes.Type(value=BusinessEvent.UnknownOutcome.class,name="UnknownOutcome"),
     @JsonSubTypes.Type(value=BusinessEvent.Quarantined.class,name="Quarantined")
@@ -29,6 +34,11 @@ public sealed interface BusinessEvent {
     record CancelRejected(UUID childId) implements BusinessEvent {}
     record ReplaceRequested(UUID childId, Replacement replacement) implements BusinessEvent {}
     record ReplaceConfirmed(UUID childId) implements BusinessEvent {}
+    record ReplaceRejected(UUID childId) implements BusinessEvent {}
+    record Expired(UUID childId) implements BusinessEvent {}
+    record Suspended(UUID childId) implements BusinessEvent {}
+    record Resumed(UUID childId) implements BusinessEvent {}
+    record ReconciliationRequired(UUID childId, String reason) implements BusinessEvent {}
     record BrokerRejected(UUID childId, String reason) implements BusinessEvent {}
     record UnknownOutcome(UUID childId) implements BusinessEvent {}
     record Quarantined(String reason, String source) implements BusinessEvent {}

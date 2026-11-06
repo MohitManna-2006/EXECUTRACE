@@ -173,6 +173,11 @@ public final class SqliteJournal implements AutoCloseable {
         if (event instanceof BusinessEvent.CancelRejected e) return e.childId().toString();
         if (event instanceof BusinessEvent.ReplaceRequested e) return e.childId().toString();
         if (event instanceof BusinessEvent.ReplaceConfirmed e) return e.childId().toString();
+        if (event instanceof BusinessEvent.ReplaceRejected e) return e.childId().toString();
+        if (event instanceof BusinessEvent.Expired e) return e.childId().toString();
+        if (event instanceof BusinessEvent.Suspended e) return e.childId().toString();
+        if (event instanceof BusinessEvent.Resumed e) return e.childId().toString();
+        if (event instanceof BusinessEvent.ReconciliationRequired e) return e.childId().toString();
         if (event instanceof BusinessEvent.BrokerRejected e) return e.childId().toString();
         if (event instanceof BusinessEvent.UnknownOutcome e) return e.childId().toString();
         return fallback.toString();
