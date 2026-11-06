@@ -2,6 +2,8 @@ package io.executrace.core;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /** Pure, versioned business reducer. No clock, IO, random source, or outbound adapter. */
@@ -14,6 +16,7 @@ public final class OmsReducer {
         Map<UUID, ChildOrder> children = new HashMap<>(before.children());
         Map<String, Fill> fills = new HashMap<>(before.fills());
         Map<UUID, Replacement> replacements = new HashMap<>(before.replacements());
+        Set<String> usedClientOrderIds = new HashSet<>(before.usedClientOrderIds());
         if (event instanceof BusinessEvent.ParentAccepted e) {
             ParentOrder p = e.parent();
             require(p.filledQty() == 0, "new parent cannot have fills");
@@ -26,8 +29,7 @@ public final class OmsReducer {
             require(c.state() == OrderState.PENDING_NEW && c.requestState() == RequestState.NONE
                     && c.cumQty() == 0 && c.canceledQty() == 0 && c.revision() == 0,
                     "child must begin pending new and unfilled");
-            require(children.values().stream().noneMatch(x -> x.clientOrderId().equals(c.clientOrderId())),
-                    "duplicate client order id");
+            require(usedClientOrderIds.add(c.clientOrderId()), "duplicate client order id");
             require(Math.addExact(Math.addExact(p.filledQty(), before.liveLeaves(p.id())), c.effectiveQty()) <= p.originalQty(),
                     "parent capacity exceeded");
             children.put(c.id(), c);
@@ -86,8 +88,7 @@ public final class OmsReducer {
             ChildOrder c = child(children, e.childId()); Replacement r = e.replacement();
             require(c.liveOrUnknown() && c.requestState() == RequestState.NONE, "replace not permitted");
             require(r.newQuantityShares() >= c.cumQty(), "replace below executed quantity");
-            require(children.values().stream().noneMatch(x -> x.clientOrderId().equals(r.newClientOrderId())),
-                    "duplicate replacement client id");
+            require(usedClientOrderIds.add(r.newClientOrderId()), "duplicate replacement client id");
             replacements.put(c.id(), r);
             children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
                     c.fillNotionalMicroUsd(), c.state(), RequestState.PENDING_REPLACE, c.brokerOrderId()));
@@ -121,7 +122,7 @@ public final class OmsReducer {
         } else if (!(event instanceof BusinessEvent.Quarantined)) {
             throw new DomainException("unrecognized event");
         }
-        OmsState after = new OmsState(parents, children, fills, replacements);
+        OmsState after = new OmsState(parents, children, fills, replacements, usedClientOrderIds);
         for (ParentOrder p : after.parents().values())
             require(Math.addExact(p.filledQty(), after.liveLeaves(p.id())) <= p.originalQty(), "parent overcommitted");
         return after;

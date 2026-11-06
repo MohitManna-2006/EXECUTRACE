@@ -14,7 +14,7 @@ class DomainRecordsTest {
     @Test void projectionCopiesMaps() {
         var m = new java.util.HashMap<java.util.UUID, ParentOrder>();
         m.put(TestOrders.PARENT, TestOrders.parent(10));
-        var state = new OmsState(m, java.util.Map.of(), java.util.Map.of(), java.util.Map.of());
+        var state = new OmsState(m, java.util.Map.of(), java.util.Map.of(), java.util.Map.of(), java.util.Set.of());
         m.clear(); assertThat(state.parents()).hasSize(1);
         assertThatThrownBy(() -> state.parents().clear()).isInstanceOf(UnsupportedOperationException.class);
     }
