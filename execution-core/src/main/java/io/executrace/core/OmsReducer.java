@@ -122,7 +122,7 @@ public final class OmsReducer {
             replacements.remove(c.id());
         } else if (event instanceof BusinessEvent.Suspended e) {
             ChildOrder c = child(children, e.childId());
-            require(c.liveOrUnknown() && c.state() != OrderState.SUSPENDED, "suspension not expected");
+            require(c.state() == OrderState.NEW || c.state() == OrderState.PARTIALLY_FILLED, "suspension not expected");
             children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
                     c.fillNotionalMicroUsd(), OrderState.SUSPENDED, c.requestState(), c.brokerOrderId()));
         } else if (event instanceof BusinessEvent.Resumed e) {
