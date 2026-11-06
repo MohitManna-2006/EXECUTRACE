@@ -129,27 +129,18 @@ public final class SqliteJournal implements AutoCloseable {
             p.setString(4, new String(bytes, StandardCharsets.UTF_8)); p.setString(5, CanonicalJson.sha256(bytes)); p.executeUpdate();
         } catch (SQLException e) { throw new IllegalStateException("snapshot write failed", e); }
     }
-    public synchronized OmsState validSnapshot(List<JournalEnvelope> events) {
+    public record LoadedSnapshot(long lastOffset, OmsState state) {}
+    public synchronized LoadedSnapshot validSnapshot(List<JournalEnvelope> events) {
         try (Statement s = db.createStatement(); ResultSet r = s.executeQuery("SELECT last_offset,reducer_version,journal_digest,state_json,state_sha256 FROM snapshots ORDER BY last_offset DESC")) {
             while (r.next()) {
                 long offset = r.getLong(1); byte[] bytes = r.getString(4).getBytes(StandardCharsets.UTF_8);
                 if (r.getInt(2) != OmsReducer.VERSION || offset > events.size() || offset <= 0) continue;
                 if (!events.get((int)offset-1).digestSha256().equals(r.getString(3)) ||
                         !CanonicalJson.sha256(bytes).equals(r.getString(5))) continue;
-                try { return CanonicalJson.read(bytes, OmsState.class); } catch (IllegalArgumentException ignored) { /* fall back to genesis */ }
+                try { return new LoadedSnapshot(offset, CanonicalJson.read(bytes, OmsState.class)); }
+                catch (IllegalArgumentException ignored) { /* fall back to older snapshot or genesis */ }
             }
             return null;
-        } catch (SQLException e) { throw new IllegalStateException("snapshot read failed", e); }
-    }
-    public synchronized long latestSnapshotOffset(List<JournalEnvelope> events) {
-        try (Statement s = db.createStatement(); ResultSet r = s.executeQuery("SELECT last_offset,reducer_version,journal_digest,state_json,state_sha256 FROM snapshots ORDER BY last_offset DESC")) {
-            while (r.next()) {
-                long offset = r.getLong(1);
-                if (offset > 0 && offset <= events.size() && r.getInt(2) == OmsReducer.VERSION &&
-                    events.get((int)offset-1).digestSha256().equals(r.getString(3)) &&
-                    CanonicalJson.sha256(r.getString(4)).equals(r.getString(5))) return offset;
-            }
-            return 0;
         } catch (SQLException e) { throw new IllegalStateException("snapshot read failed", e); }
     }
     @Override public void close() {

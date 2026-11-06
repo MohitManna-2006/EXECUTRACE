@@ -13,10 +13,9 @@ public final class SingleWriterSequencer implements AutoCloseable {
         journal = new SqliteJournal(file);
         List<JournalEnvelope> events = journal.readAll();
         ReplayVerifier.Result genesis = ReplayVerifier.fromGenesis(events);
-        OmsState snapshot = journal.validSnapshot(events);
+        SqliteJournal.LoadedSnapshot snapshot = journal.validSnapshot(events);
         if (snapshot != null) {
-            long offset = journal.latestSnapshotOffset(events);
-            ReplayVerifier.Result tail = ReplayVerifier.fromSnapshot(snapshot, offset, events);
+            ReplayVerifier.Result tail = ReplayVerifier.fromSnapshot(snapshot.state(), snapshot.lastOffset(), events);
             if (!tail.projectionDigestSha256().equals(genesis.projectionDigestSha256()))
                 throw new IllegalStateException("snapshot/replay projection mismatch");
         }
