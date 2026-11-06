@@ -39,7 +39,7 @@ public final class SingleWriterSequencer implements AutoCloseable {
             stored = new BusinessEvent.Quarantined(reason, input.getClass().getSimpleName());
             next = OmsReducer.apply(state, stored); accepted = false;
         }
-        OutboxEntry outbox = accepted ? outboxFor(input, state) : null;
+        OutboxEntry outbox = accepted && next != state ? outboxFor(input, state) : null;
         String digest = ReplayVerifier.digest(next);
         JournalEnvelope committed = journal.append(scope, requestId, hash, eventTimeNs, stored, accepted, reason, digest, outbox);
         hook.at("afterCommitBeforePublish");
