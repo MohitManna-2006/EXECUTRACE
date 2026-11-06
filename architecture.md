@@ -2,7 +2,7 @@
 
 ## 0. Document authority
 
-**Version:** 0.1.0. **Status:** Proposed architecture, documentation only (2026-11-05). **Audience:** implementers, reviewers, test authors, and AI coding agents. This document is the authoritative proposed contract; the README is its summary. A code implementation that disagrees with this document is an engineering discrepancy: fix code or approve an explicit design amendment. A future `docs/adr/NNNN-title.md` records context, alternatives, decision, consequences, migration, and tests; an ADR does not silently supersede this document. Update the affected section and schema version in the same change.
+**Version:** 0.2.0. **Status:** Proposed architecture with Phase 1 core implemented (2026-11-05). **Audience:** implementers, reviewers, test authors, and AI coding agents. This document is the authoritative proposed contract; the README is its summary. A code implementation that disagrees with this document is an engineering discrepancy: fix code or approve an explicit design amendment. A future `docs/adr/NNNN-title.md` records context, alternatives, decision, consequences, migration, and tests; an ADR does not silently supersede this document. Update the affected section and schema version in the same change.
 
 **Normative words:** MUST/MUST NOT are gates; SHOULD is the default unless an ADR gives evidence; MAY is optional. `PLANNED` means no implementation exists. Agents MUST read the relevant section and invariant IDs before editing; MUST NOT silently change event order, durable commit rules, idempotency keys, risk release, numeric scale, schemas, or replay. They MUST produce passing, failing, and recovery evidence for the stage they implement. No observed performance or AI accuracy is claimed here.
 
@@ -518,11 +518,11 @@ research/                   benchmark and evaluation reports, no runtime depende
 
 ## 23. Phased implementation plan
 
-**Phase status:** phases 0–8 are **PLANNED — NOT IMPLEMENTED**; writing this document establishes the proposed Phase 0 design text only. A phase is complete when its evidence gate passes, not when files compile. The first end-to-end order demo is the critical path P1→P2→P3; P4→P5→P6 add operations/AI; P7 hardens. A focused 2–3 week initial release can narrow symbols, accounts, and UI while retaining the core gates. If time slips, complete P1–P3 plus replay/cancel/duplicate demos, then P4 minimal telemetry and P5 deterministic alert; defer optional LLM and all P8 integrations. No estimated coding-hour claim is a correctness criterion.
+**Phase status:** Phase 0 build/schema foundation and Phase 1 Java core are implemented; phases 2–8 are **PLANNED — NOT IMPLEMENTED**. Phase 1 has no broker/venue process, risk reservations, execution scheduler, control API, or live order path. A phase is complete when its evidence gate passes, not when files compile. The first end-to-end order demo is the critical path P1→P2→P3; P4→P5→P6 add operations/AI; P7 hardens. A focused 2–3 week initial release can narrow symbols, accounts, and UI while retaining the core gates. If time slips, complete P1–P3 plus replay/cancel/duplicate demos, then P4 minimal telemetry and P5 deterministic alert; defer optional LLM and all P8 integrations. No estimated coding-hour claim is a correctness criterion.
 
 Each phase below is one acceptance **stage** with ordered sub-stages. The numbered fields are mandatory handoff instructions for an implementation agent; file names are planned locations, not current files.
 
-### Phase 0 — architecture and repository foundation — PLANNED, NOT IMPLEMENTED
+### Phase 0 — architecture and repository foundation — FOUNDATION IMPLEMENTED
 
 1. **Objective:** make contracts and build conventions executable without changing semantics.
 2. **Scope/sub-stages:** (0a) schema/invariant review, (0b) Java toolchain/Gradle locking, (0c) deterministic fixture and ADR conventions.
@@ -544,7 +544,7 @@ Each phase below is one acceptance **stage** with ordered sub-stages. The number
 18. **Learning:** Gradle toolchains, deterministic serialization, architectural authority.
 19. **Explain without AI:** why units/versioning/IDs constrain future replay.
 
-### Phase 1 — authoritative lifecycle — PLANNED, NOT IMPLEMENTED
+### Phase 1 — authoritative lifecycle — CORE IMPLEMENTED, TESTED
 
 1. **Objective:** durable parent/child reducer with replay and economic idempotency.
 2. **Scope/sub-stages:** (1a) domain/numeric types, (1b) single writer and transition reducer, (1c) SQLite journal/outbox/snapshot, (1d) property/reference tests.
