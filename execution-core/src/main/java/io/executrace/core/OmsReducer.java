@@ -34,10 +34,12 @@ public final class OmsReducer {
         } else if (event instanceof BusinessEvent.Acknowledged e) {
             ChildOrder c = child(children, e.childId());
             Checks.text(e.brokerOrderId(), "brokerOrderId", 64);
-            if (c.state() == OrderState.NEW && e.brokerOrderId().equals(c.brokerOrderId())) return before;
-            require(c.state() == OrderState.PENDING_NEW || c.state() == OrderState.UNKNOWN, "ack not expected");
+            if (e.brokerOrderId().equals(c.brokerOrderId()) && c.state() != OrderState.PENDING_NEW && c.state() != OrderState.UNKNOWN) return before;
+            require(c.brokerOrderId() == null && (c.state() == OrderState.PENDING_NEW || c.state() == OrderState.UNKNOWN
+                    || c.state() == OrderState.PARTIALLY_FILLED || c.state() == OrderState.FILLED), "ack not expected");
+            OrderState state = c.cumQty() == 0 ? OrderState.NEW : c.state();
             children.put(c.id(), c.change(c.effectiveQty(), c.cumQty(), c.canceledQty(), c.limitPriceMicroUsd(),
-                    c.fillNotionalMicroUsd(), OrderState.NEW, c.requestState(), e.brokerOrderId()));
+                    c.fillNotionalMicroUsd(), state, c.requestState(), e.brokerOrderId()));
         } else if (event instanceof BusinessEvent.FillReceived e) {
             Fill f = e.fill(); String key = fillKey(f.key());
             Fill previous = fills.get(key);
