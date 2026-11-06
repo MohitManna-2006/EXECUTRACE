@@ -48,6 +48,9 @@ public final class OmsReducer {
                 return before;
             }
             ChildOrder c = child(children, f.childId());
+            ParentOrder p = parent(parents, c.parentId());
+            require(p.side() == Side.BUY ? f.priceMicroUsd() <= c.limitPriceMicroUsd() :
+                    f.priceMicroUsd() >= c.limitPriceMicroUsd(), "fill violates limit price");
             require(c.liveOrUnknown(), "fill on terminal order");
             long nextCum = Math.addExact(c.cumQty(), f.quantityShares());
             require(nextCum <= c.effectiveQty() - c.canceledQty(), "fill exceeds leaves");
@@ -57,7 +60,6 @@ public final class OmsReducer {
             RequestState request = nextLeaves == 0 ? RequestState.NONE : c.requestState();
             children.put(c.id(), c.change(c.effectiveQty(), nextCum, c.canceledQty(), c.limitPriceMicroUsd(),
                     nextNotional, nextState, request, c.brokerOrderId()));
-            ParentOrder p = parent(parents, c.parentId());
             parents.put(p.id(), p.withFilled(Math.addExact(p.filledQty(), f.quantityShares())));
             fills.put(key, f);
             if (nextLeaves == 0) replacements.remove(c.id());
