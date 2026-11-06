@@ -17,9 +17,12 @@ import java.util.zip.CRC32C;
 public final class SqliteJournal implements AutoCloseable {
     public static final String GENESIS_DIGEST = "0".repeat(64);
     private final Connection db;
+    private final CommitHook hook;
     public record Dedupe(long offset, String payloadHash, boolean accepted, String reason, String projectionDigestSha256) {}
 
-    public SqliteJournal(Path file) {
+    public SqliteJournal(Path file) { this(file, CommitHook.NONE); }
+    public SqliteJournal(Path file, CommitHook hook) {
+        this.hook = Checks.present(hook, "hook");
         try {
             db = DriverManager.getConnection("jdbc:sqlite:" + file.toAbsolutePath());
             try (Statement s = db.createStatement()) {
@@ -77,6 +80,7 @@ public final class SqliteJournal implements AutoCloseable {
                 p.setLong(1, offset); p.setString(2, outbox.commandType()); p.setString(3, outbox.clientOrderId());
                 p.setString(4, outbox.payloadJson()); p.setString(5, "PENDING"); p.executeUpdate();
             }
+            hook.at("beforeCommit");
             db.commit(); return envelope;
         } catch (Exception e) {
             try { db.rollback(); } catch (SQLException rollback) { e.addSuppressed(rollback); }

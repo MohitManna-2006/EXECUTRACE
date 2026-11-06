@@ -8,9 +8,12 @@ import java.util.UUID;
 /** Phase-1 local single writer. A later bounded queue may submit to this owner thread. */
 public final class SingleWriterSequencer implements AutoCloseable {
     private final SqliteJournal journal;
+    private final CommitHook hook;
     private OmsState state;
-    public SingleWriterSequencer(Path file) {
-        journal = new SqliteJournal(file);
+    public SingleWriterSequencer(Path file) { this(file, CommitHook.NONE); }
+    public SingleWriterSequencer(Path file, CommitHook hook) {
+        this.hook = Checks.present(hook, "hook");
+        journal = new SqliteJournal(file, hook);
         List<JournalEnvelope> events = journal.readAll();
         ReplayVerifier.Result genesis = ReplayVerifier.fromGenesis(events);
         SqliteJournal.LoadedSnapshot snapshot = journal.validSnapshot(events);
@@ -39,6 +42,7 @@ public final class SingleWriterSequencer implements AutoCloseable {
         OutboxEntry outbox = accepted ? outboxFor(input, state) : null;
         String digest = ReplayVerifier.digest(next);
         JournalEnvelope committed = journal.append(scope, requestId, hash, eventTimeNs, stored, accepted, reason, digest, outbox);
+        hook.at("afterCommitBeforePublish");
         state = next; // publish only after durable commit
         return new CommandReceipt(committed.sequencerOffset(), false, accepted, reason, digest);
     }
