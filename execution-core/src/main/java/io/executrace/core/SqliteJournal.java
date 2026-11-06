@@ -1,6 +1,7 @@
 package io.executrace.core;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,7 +31,7 @@ public final class SqliteJournal implements AutoCloseable {
                 s.execute("PRAGMA synchronous=FULL");
                 s.execute("PRAGMA foreign_keys=ON");
                 s.execute("PRAGMA busy_timeout=5000");
-                s.execute("CREATE TABLE IF NOT EXISTS events (offset INTEGER PRIMARY KEY, event_id TEXT NOT NULL UNIQUE, schema_version INTEGER NOT NULL, reducer_version INTEGER NOT NULL, event_time_ns INTEGER NOT NULL, payload_json TEXT NOT NULL, payload_crc32c INTEGER NOT NULL, previous_digest TEXT NOT NULL, digest TEXT NOT NULL)");
+                s.execute("CREATE TABLE IF NOT EXISTS events (offset INTEGER PRIMARY KEY, event_id TEXT NOT NULL UNIQUE, schema_version INTEGER NOT NULL, reducer_version INTEGER NOT NULL, event_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, event_time_ns INTEGER NOT NULL, receive_utc TEXT NOT NULL, processing_utc TEXT NOT NULL, payload_json TEXT NOT NULL, payload_crc32c INTEGER NOT NULL, previous_digest TEXT NOT NULL, digest TEXT NOT NULL)");
                 s.execute("CREATE TABLE IF NOT EXISTS request_dedupe (scope TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, offset INTEGER NOT NULL, accepted INTEGER NOT NULL, reason TEXT NOT NULL, projection_digest TEXT NOT NULL, PRIMARY KEY(scope, request_id), FOREIGN KEY(offset) REFERENCES events(offset))");
                 s.execute("CREATE TABLE IF NOT EXISTS outbox (source_offset INTEGER PRIMARY KEY, command_type TEXT NOT NULL, client_order_id TEXT NOT NULL, payload_json TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('PENDING','ATTEMPTED','CONFIRMED','UNKNOWN')), FOREIGN KEY(source_offset) REFERENCES events(offset))");
                 s.execute("CREATE TABLE IF NOT EXISTS snapshots (last_offset INTEGER PRIMARY KEY, reducer_version INTEGER NOT NULL, journal_digest TEXT NOT NULL, state_json TEXT NOT NULL, state_sha256 TEXT NOT NULL, FOREIGN KEY(last_offset) REFERENCES events(offset))");
@@ -62,15 +63,22 @@ public final class SqliteJournal implements AutoCloseable {
                 if (r.next()) { offset = Math.addExact(r.getLong(1), 1); previous = r.getString(2); }
             }
             UUID eventId = UUID.randomUUID();
+            String eventType = event.getClass().getSimpleName();
+            String entityType = entityType(event);
+            String entityId = entityId(event, eventId);
+            String receiveUtc = Instant.now().toString();
+            String processingUtc = Instant.now().toString();
             JournalEnvelope.Unsigned unsigned = new JournalEnvelope.Unsigned(1, OmsReducer.VERSION, eventId, offset,
-                    eventTimeNs, event, crc.getValue(), previous);
+                    eventType, entityType, entityId, eventTimeNs, receiveUtc, processingUtc, event, crc.getValue(), previous);
             String digest = CanonicalJson.sha256(CanonicalJson.bytes(unsigned));
-            JournalEnvelope envelope = new JournalEnvelope(1, OmsReducer.VERSION, eventId, offset, eventTimeNs,
-                    event, crc.getValue(), previous, digest);
-            try (PreparedStatement p = db.prepareStatement("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?)")) {
+            JournalEnvelope envelope = new JournalEnvelope(1, OmsReducer.VERSION, eventId, offset, eventType, entityType,
+                    entityId, eventTimeNs, receiveUtc, processingUtc, event, crc.getValue(), previous, digest);
+            try (PreparedStatement p = db.prepareStatement("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                 p.setLong(1, offset); p.setString(2, eventId.toString()); p.setInt(3, 1); p.setInt(4, OmsReducer.VERSION);
-                p.setLong(5, eventTimeNs); p.setString(6, new String(payload, StandardCharsets.UTF_8));
-                p.setLong(7, crc.getValue()); p.setString(8, previous); p.setString(9, digest); p.executeUpdate();
+                p.setString(5, eventType); p.setString(6, entityType); p.setString(7, entityId);
+                p.setLong(8, eventTimeNs); p.setString(9, receiveUtc); p.setString(10, processingUtc);
+                p.setString(11, new String(payload, StandardCharsets.UTF_8)); p.setLong(12, crc.getValue());
+                p.setString(13, previous); p.setString(14, digest); p.executeUpdate();
             }
             try (PreparedStatement p = db.prepareStatement("INSERT INTO request_dedupe VALUES(?,?,?,?,?,?,?)")) {
                 p.setString(1, scope); p.setString(2, requestId.toString()); p.setString(3, payloadHash);
@@ -92,17 +100,21 @@ public final class SqliteJournal implements AutoCloseable {
     public synchronized List<JournalEnvelope> readAll() {
         List<JournalEnvelope> result = new ArrayList<>();
         long expected = 1; String previous = GENESIS_DIGEST;
-        try (Statement s = db.createStatement(); ResultSet r = s.executeQuery("SELECT offset,event_id,schema_version,reducer_version,event_time_ns,payload_json,payload_crc32c,previous_digest,digest FROM events ORDER BY offset")) {
+        try (Statement s = db.createStatement(); ResultSet r = s.executeQuery("SELECT offset,event_id,schema_version,reducer_version,event_type,entity_type,entity_id,event_time_ns,receive_utc,processing_utc,payload_json,payload_crc32c,previous_digest,digest FROM events ORDER BY offset")) {
             while (r.next()) {
                 long offset = r.getLong(1); if (offset != expected++) throw new IllegalStateException("journal offset gap at " + offset);
                 if (r.getInt(3) != 1 || r.getInt(4) != OmsReducer.VERSION) throw new IllegalStateException("unsupported journal version at " + offset);
-                byte[] payloadBytes = r.getString(6).getBytes(StandardCharsets.UTF_8);
+                byte[] payloadBytes = r.getString(11).getBytes(StandardCharsets.UTF_8);
                 CRC32C crc = new CRC32C(); crc.update(payloadBytes);
-                if (crc.getValue() != r.getLong(7)) throw new IllegalStateException("payload CRC mismatch at " + offset);
+                if (crc.getValue() != r.getLong(12)) throw new IllegalStateException("payload CRC mismatch at " + offset);
                 BusinessEvent event = CanonicalJson.read(payloadBytes, BusinessEvent.class);
                 if (!java.util.Arrays.equals(payloadBytes, CanonicalJson.bytes(event))) throw new IllegalStateException("noncanonical payload at " + offset);
                 JournalEnvelope e = new JournalEnvelope(1, OmsReducer.VERSION, UUID.fromString(r.getString(2)), offset,
-                        r.getLong(5), event, r.getLong(7), r.getString(8), r.getString(9));
+                        r.getString(5), r.getString(6), r.getString(7), r.getLong(8), r.getString(9), r.getString(10),
+                        event, r.getLong(12), r.getString(13), r.getString(14));
+                if (!event.getClass().getSimpleName().equals(e.eventType()) || !entityType(event).equals(e.entityType()) ||
+                        !entityId(event, e.eventId()).equals(e.entityId()))
+                    throw new IllegalStateException("event identity mismatch at " + offset);
                 if (!previous.equals(e.previousDigestSha256()) ||
                         !CanonicalJson.sha256(CanonicalJson.bytes(e.unsigned())).equals(e.digestSha256()))
                     throw new IllegalStateException("journal digest mismatch at " + offset);
@@ -146,6 +158,24 @@ public final class SqliteJournal implements AutoCloseable {
             }
             return null;
         } catch (SQLException e) { throw new IllegalStateException("snapshot read failed", e); }
+    }
+    private static String entityType(BusinessEvent event) {
+        return event instanceof BusinessEvent.ParentAccepted ? "ParentOrder" :
+                event instanceof BusinessEvent.Quarantined ? "JournalEvent" : "ChildOrder";
+    }
+    private static String entityId(BusinessEvent event, UUID fallback) {
+        if (event instanceof BusinessEvent.ParentAccepted e) return e.parent().id().toString();
+        if (event instanceof BusinessEvent.ChildCreated e) return e.child().id().toString();
+        if (event instanceof BusinessEvent.FillReceived e) return e.fill().childId().toString();
+        if (event instanceof BusinessEvent.Acknowledged e) return e.childId().toString();
+        if (event instanceof BusinessEvent.CancelRequested e) return e.childId().toString();
+        if (event instanceof BusinessEvent.CancelConfirmed e) return e.childId().toString();
+        if (event instanceof BusinessEvent.CancelRejected e) return e.childId().toString();
+        if (event instanceof BusinessEvent.ReplaceRequested e) return e.childId().toString();
+        if (event instanceof BusinessEvent.ReplaceConfirmed e) return e.childId().toString();
+        if (event instanceof BusinessEvent.BrokerRejected e) return e.childId().toString();
+        if (event instanceof BusinessEvent.UnknownOutcome e) return e.childId().toString();
+        return fallback.toString();
     }
     @Override public void close() {
         try { db.close(); } catch (SQLException e) { throw new IllegalStateException("journal close failed", e); }
