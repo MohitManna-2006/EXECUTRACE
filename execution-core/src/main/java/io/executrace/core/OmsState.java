@@ -9,7 +9,7 @@ public record OmsState(Map<UUID, ParentOrder> parents, Map<UUID, ChildOrder> chi
     public OmsState {
         parents = Map.copyOf(parents); children = Map.copyOf(children);
         fills = Map.copyOf(fills); replacements = Map.copyOf(replacements);
-        usedClientOrderIds = java.util.Set.copyOf(usedClientOrderIds);
+        usedClientOrderIds = java.util.Collections.unmodifiableSortedSet(new java.util.TreeSet<>(usedClientOrderIds));
     }
     public static OmsState empty() { return new OmsState(Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of()); }
     public long liveLeaves(UUID parentId) {
