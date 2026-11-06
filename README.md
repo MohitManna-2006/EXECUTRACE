@@ -4,7 +4,7 @@
 
 A portfolio manager's decision to trade is only the beginning of an execution workflow. Orders must pass risk checks, be scheduled into child orders, survive broker uncertainty and duplicate messages, and reconcile to positions and cash. EXECUTRACE is an educational engineering project to make those transitions explicit, durable, testable, and observable. It does not choose securities or predict returns.
 
-> **Status: design only.** This commit defines the proposed architecture and implementation contract. No OMS, broker, API, telemetry pipeline, or diagnostic service is implemented. Every development phase below is **PLANNED — NOT IMPLEMENTED**. The authoritative specification is [architecture.md](architecture.md).
+> **Status: Phase 1 Java execution core implemented and tested.** The durable OMS reducer, single-writer admission, SQLite journal/outbox, snapshots, idempotency and replay are present. Risk reservations, TWAP/VWAP, a broker/venue simulator, control API, telemetry and diagnostics remain **PLANNED — NOT IMPLEMENTED**. The authoritative contract is [architecture.md](architecture.md).
 
 ## What the system will simulate
 
@@ -37,7 +37,7 @@ flowchart LR
 
 The first executable system is a modular Java process with a deterministic standalone broker simulator. Python diagnostics run separately. The dotted edges are best-effort monitoring or future integration, never authority for order state.
 
-## Planned components
+## Component responsibilities and status
 
 | Component | Ownership and contract |
 | --- | --- |
@@ -80,8 +80,8 @@ The first executable system is a modular Java process with a deterministic stand
 
 | Phase | Planned evidence gate | Status |
 | --- | --- | --- |
-| 0 | Architecture, schemas, conventions, acceptance contract | **PLANNED — NOT IMPLEMENTED** (design text established here) |
-| 1 | Durable Java lifecycle, replay, idempotency, property tests | **PLANNED — NOT IMPLEMENTED** |
+| 0 | Architecture, Java 21/Gradle foundation, envelope schema and conventions | **FOUNDATION IMPLEMENTED**; further schemas arrive with their phases |
+| 1 | Durable Java lifecycle, replay, idempotency, property and crash tests | **IMPLEMENTED — CORE TESTS PASS**; broker integration is Phase 3 |
 | 2 | Serialized risk reservations, TWAP then VWAP, scheduling tests | **PLANNED — NOT IMPLEMENTED** |
 | 3 | Standalone broker, fills/cancels, recovery, reconciliation/accounting | **PLANNED — NOT IMPLEMENTED** |
 | 4 | Context propagation, metrics/traces/logs, collector-failure test | **PLANNED — NOT IMPLEMENTED** |
@@ -94,19 +94,18 @@ The 2–3 week target is a coherent local demonstration through the critical pat
 
 ## Prerequisites and running status
 
-**No installation or run command exists yet.** The planned development environment is Java 21, Gradle wrapper, Python 3.12+, and Git. Docker is optional for later integration; C++20/CMake are optional for native adapters. macOS is supported for functional development; Linux x86-64 is required for native IRONBUS experiments. Docker on Apple Silicon does not establish native x86-64 latency claims.
+**The Phase 1 test command works; there is no runnable execution demo or service yet.** Install Java 21 and Git, then run `./gradlew :execution-core:test` from the repository root. The Gradle wrapper downloads Gradle; dependencies are locked. Python 3.12+ is needed only for later diagnostics. Docker is optional for later integration; C++20/CMake are optional for native adapters. macOS is supported for functional development; Linux x86-64 is required for native IRONBUS experiments. Docker on Apple Silicon does not establish native x86-64 latency claims.
 
-The following is an **illustrative planned CLI**, not a working command sequence:
+The following execution CLI is **illustrative and planned**, not a working command sequence:
 
 ```text
-# PLANNED ONLY — commands and flags are proposed acceptance interfaces
-./gradlew test
+# PLANNED ONLY — execution commands and flags are proposed acceptance interfaces
 ./gradlew :execution-app:run --args='simulate --scenario normal-vwap --seed 17'
 ./gradlew :execution-app:run --args='replay-verify --run-id <id>'
 python -m pytest ai-diagnostics/tests
 ```
 
-Actual commands will be documented only after implemented and verified. The final workflow should produce a run manifest, journal/replay digest, accounting and TCA report, traces/metrics, fault record, and incident evidence bundle.
+Phase 1 currently provides a Java library and verified tests, not an operator CLI. Actual execution commands will be documented after implementation and verification. The final workflow should produce a run manifest, journal/replay digest, accounting and TCA report, traces/metrics, fault record, and incident evidence bundle.
 
 ## Validation philosophy
 
