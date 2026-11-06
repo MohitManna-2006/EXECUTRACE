@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MohitManna-2006/EXECUTRACE/blob/main/schemas/journal-event-v1.schema.json",
+  "title": "EXECUTRACE journal event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reducerVersion", "eventId", "sequencerOffset", "eventType", "entityType", "entityId", "eventTimeNs", "receiveTimeUtc", "processingTimeUtc", "payload", "payloadCrc32c", "previousDigestSha256", "digestSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "reducerVersion": {"const": 1},
+    "eventId": {"type": "string", "format": "uuid"},
+    "sequencerOffset": {"type": "integer", "minimum": 1},
+    "eventType": {"type": "string", "minLength": 1},
+    "entityType": {"enum": ["ParentOrder", "ChildOrder", "JournalEvent"]},
+    "entityId": {"type": "string", "format": "uuid"},
+    "eventTimeNs": {"type": "integer", "minimum": 0},
+    "receiveTimeUtc": {"type": "string", "format": "date-time"},
+    "processingTimeUtc": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object", "required": ["kind"]},
+    "payloadCrc32c": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "previousDigestSha256": {"$ref": "#/$defs/sha256"},
+    "digestSha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}
